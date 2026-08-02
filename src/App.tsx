@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AppProvider } from '@/context/AppContext';
 import { Layout, type Page } from '@/components/Layout';
 import { ToastContainer } from '@/components/ui/Toast';
@@ -27,6 +28,7 @@ function App() {
         {page === 'settings' && <Settings />}
       </Layout>
       <ToastContainer />
+      <SpeedInsights />
     </AppProvider>
   );
 }
