@@ -5,32 +5,36 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 const isConfigured = !!(supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('https://'));
 
+type TableRecord = Record<string, unknown>;
+
 class MockBuilder {
   private table: string;
-  private filters: ((item: any) => boolean)[] = [];
+  private filters: ((item: TableRecord) => boolean)[] = [];
   private orderCol: string | null = null;
   private orderAsc: boolean = true;
   private limitCount: number | null = null;
   private isSingle: boolean = false;
   private isMaybeSingle: boolean = false;
   private deleteQuery: boolean = false;
-  private updatePayload: any = null;
-  private insertPayload: any = null;
+  private updatePayload: TableRecord | null = null;
+  private insertPayload: TableRecord | TableRecord[] | null = null;
 
   constructor(table: string) {
     this.table = table;
   }
 
-  select(fields?: string, options?: any) {
+  select(fields?: string, options?: Record<string, unknown>) {
+    void fields;
+    void options;
     return this;
   }
-
-  insert(payload: any) {
+ 
+  insert(payload: TableRecord | TableRecord[]) {
     this.insertPayload = payload;
     return this;
   }
-
-  update(payload: any) {
+ 
+  update(payload: TableRecord) {
     this.updatePayload = payload;
     return this;
   }
@@ -40,18 +44,36 @@ class MockBuilder {
     return this;
   }
 
-  eq(column: string, value: any) {
+  eq(column: string, value: unknown) {
     this.filters.push((item) => item[column] === value);
     return this;
   }
-
-  gte(column: string, value: any) {
-    this.filters.push((item) => item[column] >= value);
+ 
+  gte(column: string, value: unknown) {
+    this.filters.push((item) => {
+      const itemValue = item[column];
+      if (typeof itemValue === 'number' && typeof value === 'number') {
+        return itemValue >= value;
+      }
+      if (typeof itemValue === 'string' && typeof value === 'string') {
+        return itemValue >= value;
+      }
+      return false;
+    });
     return this;
   }
-
-  lt(column: string, value: any) {
-    this.filters.push((item) => item[column] < value);
+ 
+  lt(column: string, value: unknown) {
+    this.filters.push((item) => {
+      const itemValue = item[column];
+      if (typeof itemValue === 'number' && typeof value === 'number') {
+        return itemValue < value;
+      }
+      if (typeof itemValue === 'string' && typeof value === 'string') {
+        return itemValue < value;
+      }
+      return false;
+    });
     return this;
   }
 
@@ -76,7 +98,7 @@ class MockBuilder {
     return this;
   }
 
-  async then(onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) {
+  async then(onfulfilled?: (value: unknown) => unknown, onrejected?: (reason: unknown) => unknown) {
     try {
       const result = await this.execute();
       return onfulfilled ? onfulfilled(result) : result;
@@ -88,7 +110,7 @@ class MockBuilder {
 
   private async execute() {
     const key = `mock_db_${this.table}`;
-    let items = JSON.parse(localStorage.getItem(key) || '[]');
+    let items = JSON.parse(localStorage.getItem(key) || '[]') as TableRecord[];
 
     // Seed default settings row if settings is queried and empty
     if (this.table === 'settings' && items.length === 0) {
@@ -113,9 +135,9 @@ class MockBuilder {
 
     if (this.insertPayload) {
       const newItems = Array.isArray(this.insertPayload) ? this.insertPayload : [this.insertPayload];
-      const inserted: any[] = [];
+      const inserted: TableRecord[] = [];
       for (const item of newItems) {
-        const fullItem = {
+        const fullItem: TableRecord = {
           id: item.id || crypto.randomUUID(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -143,14 +165,8 @@ class MockBuilder {
     }
 
     if (this.updatePayload) {
-      const updatedItems = items.map((item: any) => {
-        let match = true;
-        for (const f of this.filters) {
-          if (!f(item)) {
-            match = false;
-            break;
-          }
-        }
+      const updatedItems = items.map((item: TableRecord) => {
+        const match = this.filters.every((f) => f(item));
         if (match) {
           return {
             ...item,
@@ -161,27 +177,12 @@ class MockBuilder {
         return item;
       });
       localStorage.setItem(key, JSON.stringify(updatedItems));
-      const affected = updatedItems.filter((item: any) => {
-        let match = true;
-        for (const f of this.filters) {
-          if (!f(item)) return false;
-        }
-        return true;
-      });
+      const affected = updatedItems.filter((item: TableRecord) => this.filters.every((f) => f(item)));
       return { data: affected.length > 0 ? (this.isSingle ? affected[0] : affected) : null, error: null };
     }
 
     if (this.deleteQuery) {
-      const remainingItems = items.filter((item: any) => {
-        let match = true;
-        for (const f of this.filters) {
-          if (!f(item)) {
-            match = false;
-            break;
-          }
-        }
-        return !match;
-      });
+      const remainingItems = items.filter((item: TableRecord) => !this.filters.every((f) => f(item)));
       localStorage.setItem(key, JSON.stringify(remainingItems));
       return { data: null, error: null };
     }
@@ -195,15 +196,18 @@ class MockBuilder {
     if (this.orderCol) {
       const col = this.orderCol;
       const asc = this.orderAsc;
-      filtered.sort((a: any, b: any) => {
+      filtered.sort((a: TableRecord, b: TableRecord) => {
         const valA = a[col];
         const valB = b[col];
         if (valA === undefined || valA === null) return 1;
         if (valB === undefined || valB === null) return -1;
-        if (typeof valA === 'string') {
+        if (typeof valA === 'string' && typeof valB === 'string') {
           return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
         }
-        return asc ? valA - valB : valB - valA;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return asc ? valA - valB : valB - valA;
+        }
+        return 0;
       });
     }
 
@@ -219,7 +223,8 @@ class MockBuilder {
   }
 }
 
-export const supabase = isConfigured
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const supabase: any = isConfigured
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
@@ -227,4 +232,4 @@ export const supabase = isConfigured
     })
   : ({
       from: (table: string) => new MockBuilder(table),
-    } as any);
+    });

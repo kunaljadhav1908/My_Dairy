@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/context/AppContext';
+import type { Bill, MilkCollection, Payment } from '@/types';
 import { StatCard } from '@/components/ui/StatCard';
 import { DonutChart, LineChart } from '@/components/ui/Charts';
 import { formatCurrency, todayISO, currentMonth, currentYear, monthName } from '@/lib/utils';
@@ -47,11 +48,11 @@ export function Dashboard() {
     const symbol = settings?.currency_symbol ?? '₹';
 
     // Today's collections
-    const { data: todayColl } = await supabase
+    const { data: todayColl } = (await (supabase
       .from('milk_collections')
       .select('quantity, fat, snf, total_amount, milk_type')
-      .eq('collection_date', today);
-
+      .eq('collection_date', today) as unknown)) as { data: MilkCollection[] | null; error: unknown };
+ 
     const todayQuantity = todayColl?.reduce((s, c) => s + Number(c.quantity), 0) ?? 0;
     const todayIncome = todayColl?.reduce((s, c) => s + Number(c.total_amount), 0) ?? 0;
     const todayAvgFat = todayColl && todayColl.length > 0
@@ -73,33 +74,33 @@ export function Dashboard() {
     }).filter((d) => d.value > 0);
 
     // Monthly income
-    const { data: monthColl } = await supabase
+    const { data: monthColl } = (await (supabase
       .from('milk_collections')
       .select('total_amount')
       .gte('collection_date', `${year}-${String(month).padStart(2, '0')}-01`)
-      .lt('collection_date', `${year}-${String(month + 1).padStart(2, '0')}-01`);
-
+      .lt('collection_date', `${year}-${String(month + 1).padStart(2, '0')}-01`) as unknown)) as { data: MilkCollection[] | null; error: unknown };
+ 
     const monthlyIncome = monthColl?.reduce((s, c) => s + Number(c.total_amount), 0) ?? 0;
 
     // Total customers
     const { count: totalCustomers } = await supabase
       .from('customers')
       .select('*', { count: 'exact', head: true });
-
+ 
     // Bills
-    const { data: bills } = await supabase
+    const { data: bills } = (await (supabase
       .from('bills')
-      .select('payment_status');
+      .select('payment_status') as unknown)) as { data: Bill[] | null; error: unknown };
 
     const pendingBills = bills?.filter((b) => b.payment_status === 'Pending').length ?? 0;
     const paidBills = bills?.filter((b) => b.payment_status === 'Paid').length ?? 0;
 
     // Top suppliers (by quantity this month)
-    const { data: topColl } = await supabase
+    const { data: topColl } = (await (supabase
       .from('milk_collections')
       .select('customer_name, quantity, total_amount')
       .gte('collection_date', `${year}-${String(month).padStart(2, '0')}-01`)
-      .lt('collection_date', `${year}-${String(month + 1).padStart(2, '0')}-01`);
+      .lt('collection_date', `${year}-${String(month + 1).padStart(2, '0')}-01`) as unknown)) as { data: MilkCollection[] | null; error: unknown };
 
     const supplierMap = new Map<string, { quantity: number; amount: number }>();
     topColl?.forEach((c) => {
@@ -114,11 +115,11 @@ export function Dashboard() {
       .slice(0, 5);
 
     // Recent payments
-    const { data: recentPayments } = await supabase
+    const { data: recentPayments } = (await (supabase
       .from('payments')
       .select('customer_name, amount, payment_mode, payment_date')
       .order('created_at', { ascending: false })
-      .limit(5);
+      .limit(5) as unknown)) as { data: Payment[] | null; error: unknown };
 
     // Last 7 days
     const last7Days: { label: string; value: number }[] = [];
@@ -128,10 +129,10 @@ export function Dashboard() {
       const dateStr = d.toISOString().slice(0, 10);
       const dayColl = todayColl && todayColl.length > 0 ? null : null;
       void dayColl;
-      const { data: dayData } = await supabase
+      const { data: dayData } = (await (supabase
         .from('milk_collections')
         .select('total_amount')
-        .eq('collection_date', dateStr);
+        .eq('collection_date', dateStr) as unknown)) as { data: MilkCollection[] | null; error: unknown };
       const total = dayData?.reduce((s, c) => s + Number(c.total_amount), 0) ?? 0;
       last7Days.push({
         label: d.toLocaleDateString('en-IN', { weekday: 'short' }),

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/context/AppContext';
-import type { Bill, Customer, Payment, AppliedRateSnapshot } from '@/types';
+import type { Bill, Customer, Payment, AppliedRateSnapshot, MilkCollection } from '@/types';
 import { Modal } from '@/components/ui/Modal';
 import { Pagination } from '@/components/ui/Pagination';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -40,15 +40,15 @@ export function Bills() {
   const [genMonth, setGenMonth] = useState(currentMonth());
   const [genYear, setGenYear] = useState(currentYear());
   const [generating, setGenerating] = useState(false);
-
+ 
   const symbol = settings?.currency_symbol ?? '₹';
-
+ 
   const load = async () => {
     setLoading(true);
     const [billsRes, custRes, payRes] = await Promise.all([
-      supabase.from('bills').select('*').order('created_at', { ascending: false }),
-      supabase.from('customers').select('*').order('name'),
-      supabase.from('payments').select('*'),
+      (supabase.from('bills').select('*').order('created_at', { ascending: false }) as unknown) as Promise<{ data: Bill[] | null; error: unknown }>,
+      (supabase.from('customers').select('*').order('name') as unknown) as Promise<{ data: Customer[] | null; error: unknown }>,
+      (supabase.from('payments').select('*') as unknown) as Promise<{ data: Payment[] | null; error: unknown }>,
     ]);
     if (billsRes.error) {
       notify('Failed to load bills', 'error');
@@ -93,12 +93,12 @@ export function Bills() {
       const endYear = genMonth === 12 ? genYear + 1 : genYear;
       const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
 
-      const { data: collections } = await supabase
+      const { data: collections } = (await (supabase
         .from('milk_collections')
         .select('*')
         .gte('collection_date', startDate)
-        .lt('collection_date', endDate);
-
+        .lt('collection_date', endDate) as unknown)) as { data: MilkCollection[] | null; error: unknown };
+ 
       if (!collections || collections.length === 0) {
         notify('No collections found for this month', 'error');
         setGenerating(false);
@@ -106,7 +106,7 @@ export function Bills() {
       }
 
       // Group by customer
-      const byCustomer = new Map<string, typeof collections>();
+      const byCustomer = new Map<string, MilkCollection[]>();
       collections.forEach((c) => {
         const arr = byCustomer.get(c.customer_id) ?? [];
         arr.push(c);
